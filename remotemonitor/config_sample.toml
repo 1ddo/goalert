@@ -1,0 +1,29 @@
+location="unique location name of this monitor"
+PublicURL="https://some.public.url/to/goalert"
+listenaddr = "0.0.0.0:8123"
+checkminutes = 1
+
+[Twilio]
+AccountSID = "A1B2C3D4E5"
+AuthToken = "************"
+FromNumber = "1234567890"
+MessageSID = "foo"
+
+[SMTP]
+From = "noreply@goalert.example.com"
+ServerAddr = "goalert.example.com:25"
+User = "goalertsmtpuser"
+Pass = "***********"
+
+[[Instances]]
+Location = "foo"
+PublicURL="https://some.public.url/to/goalert"
+GenericAPIKey = "xyz"
+EmailAPIKey = "abc@bestbuy.com"
+ErrorAPIKey = "def"
+HeartbeatURLs = [
+    "url1.com",
+    "url2.com"
+]
+Phone = "1234567890"
+ErrorsOnly = true

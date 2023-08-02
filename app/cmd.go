@@ -370,7 +370,7 @@ Migration: %s (#%d)
 				return err
 			}
 
-			mon, err := remotemonitor.NewMonitor(cfg)
+			mon, err := remotemonitor.NewMonitor(cmd.Context(), cfg)
 			if err != nil {
 				return err
 			}

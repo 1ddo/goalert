@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/mail"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/target/goalert/config"
 	"github.com/target/goalert/notification/twilio"
+	logger "github.com/target/goalert/util/log"
 )
 
 // Monitor will check for functionality and communication between itself and one or more instances.
@@ -30,6 +30,8 @@ type Monitor struct {
 	pendingCh  chan int
 	pending    map[string]time.Time
 	srv        *http.Server
+	log        *logger.Logger
+	ctx        context.Context
 }
 
 func setRequestScheme(scheme string, h http.Handler) http.Handler {
@@ -43,7 +45,7 @@ func setRequestScheme(scheme string, h http.Handler) http.Handler {
 }
 
 // NewMonitor creates and starts a new Monitor with the given Config.
-func NewMonitor(cfg Config) (*Monitor, error) {
+func NewMonitor(ctx context.Context, cfg Config) (*Monitor, error) {
 	err := cfg.Validate()
 	if err != nil {
 		return nil, err
@@ -65,6 +67,8 @@ func NewMonitor(cfg Config) (*Monitor, error) {
 		finishCh:   make(chan string),
 		pendingCh:  make(chan int),
 		pending:    make(map[string]time.Time),
+		log:        logger.FromContext(ctx),
+		ctx:        ctx,
 	}
 	l, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
@@ -100,7 +104,8 @@ func NewMonitor(cfg Config) (*Monitor, error) {
 
 	m.srv.SetKeepAlivesEnabled(false)
 
-	log.Println("Listening:", l.Addr())
+	m.log.EnableJSON()
+	m.log.Printf(m.ctx, "Listening %v", l.Addr().String())
 
 	go m.serve(l)
 	go m.loop()
@@ -112,7 +117,7 @@ func NewMonitor(cfg Config) (*Monitor, error) {
 func (m *Monitor) serve(l net.Listener) {
 	err := m.srv.Serve(l)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalln("ERROR:", err)
+		m.log.Error(m.ctx, err)
 	}
 }
 
@@ -124,17 +129,17 @@ func (m *Monitor) reportErr(i Instance, err error, action string) {
 	details := fmt.Sprintf("Monitor Location: %s\nInstance Location: %s\nAction: %s\nError: %s", m.cfg.Location, i.Location, action, err.Error())
 	for _, ins := range m.cfg.Instances {
 		if ins.ErrorAPIKey == "" {
-			log.Println("No ErrorAPIKey for", ins.Location)
+			m.log.Printf(m.ctx, "No ErrorAPIKey for %v", ins.Location)
 			continue
 		}
 		ins := ins // copy
 		go func() {
 			if err := ins.createGenericAlert(ins.ErrorAPIKey, "", summary, details); err != nil {
-				log.Printf("ERROR: create generic alert: %v", err)
+				m.log.Printf(m.ctx, "ERROR: create generic alert: %v", err)
 			}
 		}()
 	}
-	log.Println("ERROR:", summary)
+	m.log.Printf(m.ctx, "ERROR: %v", summary)
 }
 
 func (m *Monitor) waitLoop() {
@@ -250,7 +255,7 @@ func (m *Monitor) context() context.Context {
 
 // Shutdown gracefully shuts down the monitor, waiting for any in-flight checks to complete.
 func (m *Monitor) Shutdown(ctx context.Context) error {
-	log.Println("Beginning shutdown...")
+	m.log.Printf(ctx, "Beginning shutdown...")
 	close(m.shutdownCh)
 
 wait:
